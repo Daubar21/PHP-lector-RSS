@@ -1,87 +1,50 @@
 <?php
-
 $url = "http://ep00.epimg.net/rss/elpais/portada.xml";
-
 $opciones = [
     "http" => [
         "method" => "GET",
         "header" => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\r\n"
     ]
 ];
-
 $contexto = stream_context_create($opciones);
-
 $sXML = file_get_contents($url, false, $contexto);
 
 if ($sXML === FALSE || empty($sXML)) {
-    die("Error crítico: No se ha podido descargar el XML. El servidor remoto ha rechazado la conexión.");
-}
-
-try {
-    $oXML = new SimpleXMLElement($sXML);
-} catch (Exception $e) {
-    die("Error al procesar el XML: " . $e->getMessage());
-}
-
-require_once "conexionBBDD.php";
-
-if(isset($link) && mysqli_connect_error()){
-    printf("Conexión a la base de datos ha fallado: %s\n", mysqli_connect_error());
-} elseif (isset($link)) {
-        
-    $contador = 0;
-    $categoria = ["Política","Deportes","Ciencia","España","Economía","Música","Cine","Europa","Justicia"];
-    $categoriaFiltro = "";
-        
-    if (isset($oXML->channel->item)) {
-        foreach ($oXML->channel->item as $item){
-            
-            if (isset($item->category)) {
-                for ($i=0; $i<count($item->category); $i++){ 
-                    for($j=0; $j<count($categoria); $j++){
-                        if((string)$item->category[$i] == $categoria[$j]){
-                            $categoriaFiltro = "[".$categoria[$j]."]".$categoriaFiltro;
-                        }
-                    } 
-                }
-            }
-
-            $fPubli = strtotime($item->pubDate);
-            $new_fPubli = date('Y-m-d', $fPubli);
-            
-            $content = $item->children("content", true);
-            $encoded = isset($content->encoded) ? $content->encoded : ""; 
-
-            $sql = "SELECT link FROM elpais";
-            $result = mysqli_query($link, $sql); 
-            
-            $Repit = false;
-
-            if ($result) {
-                while($sqlCompara = mysqli_fetch_array($result)){
-                    if($sqlCompara['link'] == $item->link){
-                        $Repit = true; 
-                        $contador++;
-                        $contadorTotal = $contador;
-                        break;
-                    }
-                }
-            }
-
-            if($Repit == false && $categoriaFiltro <> ""){
-                $tituloSafe = mysqli_real_escape_string($link, $item->title);
-                $descSafe = mysqli_real_escape_string($link, $item->description);
-                $linkSafe = mysqli_real_escape_string($link, $item->link);
-                $encodedSafe = mysqli_real_escape_string($link, $encoded);
-                
-                $sql = "INSERT INTO elpais VALUES('','$tituloSafe','$linkSafe','$descSafe','$categoriaFiltro','$new_fPubli','$encodedSafe')";
-                mysqli_query($link, $sql);
-            } 
-            
-            $categoriaFiltro = "";
-        }
-    }
+    echo "<p style='color:red'>No se han podido cargar las noticias de El País.</p>";
+    $oXML = false;
 } else {
-    echo "Error: La variable de conexión \$link no está definida.";
+    libxml_use_internal_errors(true);
+    $oXML = simplexml_load_string($sXML);
+}
+
+if ($oXML) {
+    echo '<div style="display:flex; flex-wrap:wrap; gap: 20px; justify-content: center;">';
+    
+    foreach ($oXML->channel->item as $item){
+        $titulo = $item->title;
+        $linkNoticia = $item->link;
+        $descripcion = $item->description;
+        $fecha = date('d/m/Y', strtotime($item->pubDate));
+        
+        $imagen = "";
+        $content = $item->children("content", true); 
+        if (isset($content->encoded)) {
+             preg_match('/<img.+src=[\'"](?P<src>.+?)[\'"].*>/i', $content->encoded, $image);
+             if(isset($image['src'])){
+                 $imagen = "<img src='{$image['src']}' style='width:100%; height:auto; border-radius:5px;'>";
+             }
+        }
+        
+        echo "
+        <article style='border: 1px solid #ddd; padding: 15px; width: 300px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); background: white; border-radius: 8px;'>
+            $imagen
+            <h3 style='font-size: 1.1em; margin-top: 10px;'><a href='$linkNoticia' target='_blank' style='text-decoration:none; color:#004488;'>$titulo</a></h3>
+            <p style='font-size: 0.8em; color: #666;'>$fecha</p>
+            <p style='font-size: 0.9em; line-height: 1.4;'>$descripcion</p>
+            <a href='$linkNoticia' target='_blank' style='display:inline-block; margin-top:10px; padding:5px 10px; background:#004488; color:white; text-decoration:none; border-radius:4px; font-size:0.8em;'>Leer más</a>
+        </article>
+        ";
+    }
+    echo '</div>';
 }
 ?>
