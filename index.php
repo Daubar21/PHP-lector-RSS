@@ -57,9 +57,7 @@
 
             if ($periodicoSeleccionado == 'elmundo') {
                 echo "<h2>Noticias de El Mundo</h2>";
-                echo "<p style='text-align:center; color:orange;'>Nota: Si no has aplicado la corrección a RSSElMundo.php, esto fallará.</p>";
                 
-
                 require_once "RSSElMundo.php"; 
 
             } else {
